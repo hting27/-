@@ -36,6 +36,8 @@
 */
 
 #include  <os.h>
+#include  <stdlib.h>
+#include  <stdarg.h>
 
 
 /*
@@ -88,69 +90,113 @@
 *********************************************************************************************************
 */
 
-void OutFileInit() {
-    /*Clear the file*/
-    if ((Output_err = fopen_s(&Output_fp, OUTPUT_FILE_NAME, "w")) == 0)
-        fclose(Output_fp);
-    else
-        printf("Error to clear output file");
+/* HW1 BEGIN: input validation and a single output stream. */
+FILE *fp = NULL;
+FILE *Output_fp = NULL;
+errno_t Output_err = 0;
+int TASK_NUMBER = 0;
+OS_STK **Task_STK = NULL; /* Retained for compatibility with the original header. */
+task_para_set TaskParameter[OS_MAX_TASKS];
+
+void OutFileInit(void)
+{
+    Output_err = fopen_s(&Output_fp, OUTPUT_FILE_NAME, "w");
+    if (Output_err != 0 || Output_fp == NULL) {
+        fprintf(stderr, "Cannot open %s\n", OUTPUT_FILE_NAME);
+        exit(EXIT_FAILURE);
+    }
 }
 
-void InputFile() {
-    /*
-    * Read File
-    * Task Information:
-    * Task_ID Arrivetime ExecutionTime Periodic
-    */
-    errno_t err;
-    if ((err = fopen_s(&fp, INPUT_FILE_NAME, "r")) == 0)   /*task set 1-4*/
-    {
-        printf("The file 'TaskSet.txt' was opened\n");
+void InputFile(void)
+{
+    char line[256];
+    char extra;
+    unsigned id, arrival, execution, period;
+    int n = 0;
+
+    if (fopen_s(&fp, INPUT_FILE_NAME, "r") != 0 || fp == NULL) {
+        fprintf(stderr, "Cannot open %s\n", INPUT_FILE_NAME);
+        exit(EXIT_FAILURE);
     }
-    else
-    {
-        printf("The file 'TaskSet.txt' was not opened\n");
-    }
-
-    char str[MAX];
-    char* ptr;
-    char* pTmp = NULL;
-    int TaskInfo[INFO], i, j = 0;
-    TASK_NUMBER = 0;
-    while (!feof(fp))
-    {
-        i = 0;
-        memset(str, 0, sizeof(str));
-        fgets(str, sizeof(str) - 1, fp);
-        ptr = strtok_s(str, " ", &pTmp);
-        while (ptr != NULL)
-        {
-            TaskInfo[i] = atoi(ptr);
-            ptr = strtok_s(NULL, " ", &pTmp);
-            /*printf("Info: %d\n", task_inf[i]);*/
-            if (i == 0) {
-                TASK_NUMBER++;
-                TaskParameter[j].TaskID = TASK_NUMBER;
-            }
-            else if (i == 1)
-                TaskParameter[j].TaskArriveTime = TaskInfo[i];
-            else if (i == 2) {
-                TaskParameter[j].TaskExecutionTime = TaskInfo[i];
-            }
-            else if (i == 3)
-                TaskParameter[j].TaskPeriodic = TaskInfo[i];
-
-
-            i++;
+    while (fgets(line, sizeof(line), fp) != NULL) {
+        if (strspn(line, " \t\r\n") == strlen(line)) {
+            continue;
         }
-        /*Initial Priority*/
-        TaskParameter[j].TaskPriority = j;      //just an example
-
-        j++;
+        if (n >= 2 || sscanf_s(line, "%u %u %u %u %c", &id, &arrival,
+                              &execution, &period, &extra, 1u) != 4 ||
+            id != (unsigned)(n + 1) || arrival != 0u ||
+            execution > 65535u || period != (n == 0 ? 4u : 7u)) {
+            fprintf(stderr, "HW1 requires rows: 1 0 C 4 and 2 0 C 7.\n");
+            fclose(fp);
+            exit(EXIT_FAILURE);
+        }
+        TaskParameter[n].TaskID = (INT16U)id;
+        TaskParameter[n].TaskArriveTime = (INT16U)arrival;
+        TaskParameter[n].TaskExecutionTime = (INT16U)execution;
+        TaskParameter[n].TaskPeriodic = (INT16U)period;
+        TaskParameter[n].TaskPriority = (INT16U)(n + 1);
+        TaskParameter[n].TaskNumber = 0u;
+        ++n;
+    }
+    if (ferror(fp) || n != 2) {
+        fprintf(stderr, "TaskSet must contain exactly two valid tasks.\n");
+        fclose(fp);
+        exit(EXIT_FAILURE);
     }
     fclose(fp);
-    /*read file*/
+    fp = NULL;
+    TASK_NUMBER = n;
 }
+
+void HW1_Log(const char *format, ...)
+{
+    char line[256];
+    va_list args;
+    va_start(args, format);
+    vsnprintf(line, sizeof(line), format, args);
+    va_end(args);
+    printf("%s", line);
+    if (Output_fp != NULL) {
+        fputs(line, Output_fp);
+        fflush(Output_fp);
+    }
+}
+
+static void HW1_TaskLabel(OS_TCB *ptcb, char *label, size_t size)
+{
+    task_para_set *data;
+    if (ptcb->OSTCBPrio == OS_TASK_IDLE_PRIO) {
+        snprintf(label, size, "task(%u)", (unsigned)ptcb->OSTCBPrio);
+    } else {
+        data = (task_para_set *)ptcb->OSTCBExtPtr;
+        snprintf(label, size, "task(%u)(%u)",
+                 (unsigned)data->TaskID, (unsigned)data->TaskNumber);
+    }
+}
+
+void HW1_TraceSwitch(INT8U initial)
+{
+    char current[48], next[48];
+    if (initial != 0u) {
+        strcpy_s(current, sizeof(current), "***********");
+    } else {
+        HW1_TaskLabel(OSTCBCur, current, sizeof(current));
+    }
+    HW1_TaskLabel(OSTCBHighRdy, next, sizeof(next));
+    HW1_Log("%lu\t%s\t%s\t%lu\n", (unsigned long)OSTimeGet(),
+            current, next, (unsigned long)OSCtxSwCtr);
+}
+
+void HW1_TraceReady(const char *state, OS_TCB *ptcb,
+                    OS_PRIO group_before, OS_PRIO table_before)
+{
+    HW1_Log("%lu\t%s\tprio(%u)\tosrdygrp(0x%02X)(0x%02X)"
+            "\tosrdytbl(0x%02X)(0x%02X)\n", (unsigned long)OSTimeGet(),
+            state, (unsigned)ptcb->OSTCBPrio, (unsigned)group_before,
+            (unsigned)OSRdyGrp, (unsigned)table_before,
+            (unsigned)OSRdyTbl[ptcb->OSTCBY]);
+}
+/* HW1 END */
 
 /*
 *********************************************************************************************************

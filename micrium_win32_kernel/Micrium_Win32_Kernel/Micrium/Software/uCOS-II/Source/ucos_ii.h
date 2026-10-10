@@ -57,6 +57,7 @@ extern "C" {
 
 /*read file*/
 #include <string.h>
+#include <stdlib.h> /* HW1: allocation/termination declarations. */
 
 /*
 *********************************************************************************************************
@@ -68,7 +69,8 @@ extern "C" {
 #define SYSTEM_END_TIME 30
 
 /*Input File*/
-FILE* fp;
+/* HW1: declarations only; definitions are in app_hooks.c. */
+extern FILE* fp;
 #define INPUT_FILE_NAME "./TaskSet.txt"
 #define OUTPUT_FILE_NAME "./Output.txt"
 #define MAX 20
@@ -76,8 +78,8 @@ FILE* fp;
 /*Input File*/
 
 /*Output file*/
-FILE* Output_fp;
-errno_t Output_err;
+extern FILE* Output_fp;
+extern errno_t Output_err;
 /*Output File*/
 
 /*Task structure */
@@ -90,9 +92,9 @@ typedef struct task_para_set {
     INT16U TaskPriority;
 }task_para_set;
 
-int TASK_NUMBER;
-OS_STK * *Task_STK;
-task_para_set TaskParameter[OS_MAX_TASKS];
+extern int TASK_NUMBER;
+extern OS_STK **Task_STK;
+extern task_para_set TaskParameter[OS_MAX_TASKS];
 
 #ifdef   OS_GLOBALS
 #define  OS_EXT
@@ -1486,6 +1488,11 @@ void          App_TimeTickHook        (void);
 
 void          OutFileInit(void);
 void          InputFile(void);
+/* HW1: callers hold the kernel critical section (or OS has not started). */
+void          HW1_Log(const char *format, ...);
+void          HW1_TraceSwitch(INT8U initial);
+void          HW1_TraceReady(const char *state, OS_TCB *ptcb,
+                            OS_PRIO group_before, OS_PRIO table_before);
 #endif
 
 /*

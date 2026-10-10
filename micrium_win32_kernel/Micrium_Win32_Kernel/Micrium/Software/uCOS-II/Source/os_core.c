@@ -722,6 +722,8 @@ void  OSIntExit (void)
 #endif
                     OS_TRACE_ISR_EXIT_TO_SCHEDULER();
 
+                    /* HW1: counter already incremented; log before switching TCBs. */
+                    HW1_TraceSwitch(0u);
                     OSIntCtxSw();                          /* Perform interrupt level ctx switch       */
                 } else {
                     OS_TRACE_ISR_EXIT();
@@ -875,6 +877,8 @@ void  OSStart (void)
         OSPrioCur     = OSPrioHighRdy;
         OSTCBHighRdy  = OSTCBPrioTbl[OSPrioHighRdy]; /* Point to highest priority task ready to run    */
         OSTCBCur      = OSTCBHighRdy;
+        /* HW1: initial dispatch, not a context switch (counter is zero). */
+        HW1_TraceSwitch(1u);
         OSStartHighRdy();                            /* Execute target specific code to start task     */
     }
 }
@@ -939,6 +943,7 @@ void  OSStatInit (void)
 void  OSTimeTick (void)
 {
     OS_TCB    *ptcb;
+    OS_PRIO    hw1_group_before, hw1_table_before; /* HW1 */
 #if OS_TICK_STEP_EN > 0u
     BOOLEAN    step;
 #endif
@@ -1003,8 +1008,17 @@ void  OSTimeTick (void)
                     }
 
                     if ((ptcb->OSTCBStat & OS_STAT_SUSPEND) == OS_STAT_RDY) {  /* Is task suspended?       */
+                        /* HW1 BEGIN: capture only the table byte being changed. */
+                        hw1_group_before = OSRdyGrp;
+                        hw1_table_before = OSRdyTbl[ptcb->OSTCBY];
                         OSRdyGrp               |= ptcb->OSTCBBitY;             /* No,  Make ready          */
                         OSRdyTbl[ptcb->OSTCBY] |= ptcb->OSTCBBitX;
+                        /* Each completed delay releases the next job. */
+                        if (ptcb->OSTCBExtPtr != NULL && ptcb->OSTCBPrio <= 2u) {
+                            ((task_para_set *)ptcb->OSTCBExtPtr)->TaskNumber++;
+                        }
+                        HW1_TraceReady("ready", ptcb, hw1_group_before, hw1_table_before);
+                        /* HW1 END */
                         OS_TRACE_TASK_READY(ptcb);
                     }
                 }
@@ -1731,6 +1745,8 @@ void  OS_Sched (void)
 #endif
 #endif
 
+                /* HW1: counter already incremented; log before switching TCBs. */
+                HW1_TraceSwitch(0u);
                 OS_TASK_SW();                          /* Perform a context switch                     */
             }
         }

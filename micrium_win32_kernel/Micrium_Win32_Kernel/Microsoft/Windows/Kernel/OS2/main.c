@@ -54,174 +54,69 @@
 *********************************************************************************************************
 */
 
-#define TASK_STACKSIZE        2048
-static  OS_STK  StartupTaskStk[APP_CFG_STARTUP_TASK_STK_SIZE];
+/* HW1: keep the original OS2 project and the two task entry points. */
+#define TASK_STACKSIZE 2048u
+static OS_STK TaskStacks[2][TASK_STACKSIZE];
+static void task1(void *p_arg);
+static void task2(void *p_arg);
+static void TaskBody(void *p_arg);
 
-/*
-*********************************************************************************************************
-*                                         FUNCTION PROTOTYPES
-*********************************************************************************************************
-*/
-static  void  task1(void* p_arg);
-static  void  task2(void* p_arg);
-static  void  StartupTask (void  *p_arg);
-
-
-/*
-*********************************************************************************************************
-*                                                main()
-*
-* Description : This is the standard entry point for C code.  It is assumed that your code will call
-*               main() once you have performed all necessary initialization.
-*
-* Arguments   : none
-*
-* Returns     : none
-*
-* Notes       : none
-*********************************************************************************************************
-*/
-
-int  main (void)
+int main(void)
 {
-#if OS_TASK_NAME_EN > 0u
-    CPU_INT08U  os_err;
-#endif
-
+    INT8U err;
+    int n;
 
     CPU_IntInit();
-
-    Mem_Init();                                                 /* Initialize Memory Managment Module                   */
-    CPU_IntDis();                                               /* Disable all Interrupts                               */
-    CPU_Init();                                                 /* Initialize the uC/CPU services                       */
-
-    OSInit();                                                   /* Initialize uC/OS-II                                  */
-    /*Initialize Output File*/
+    Mem_Init();
+    CPU_IntDis();
+    CPU_Init();
+    OSInit();
+    InputFile();
     OutFileInit();
 
-    /*Input File*/
-    InputFile();
-
-    /*Dynamic Create the Stack size*/
-    Task_STK = malloc(TASK_NUMBER * sizeof(int*));
-
-    /* for each pointer, allocate storage for an array of ints */
-    int n;
-    for (n = 0; n < TASK_NUMBER; n++) {
-        Task_STK[n] = malloc(TASK_STACKSIZE * sizeof(int));
-    }
-    /*Creat Task Set*/
-    OSTaskCreateExt(task1,                                      /* Create the task1 */
-        &TaskParameter[0],
-        &Task_STK[0][TASK_STACKSIZE - 1],
-        TaskParameter[0].TaskPriority,
-        TaskParameter[0].TaskID,
-        &Task_STK[0][0],
-        TASK_STACKSIZE,
-        &TaskParameter[0],
-        (OS_TASK_OPT_STK_CHK | OS_TASK_OPT_STK_CLR));
-
-    OSTaskCreateExt(task2,                                      /* Create the task2 */
-        &TaskParameter[1],
-        &Task_STK[1][TASK_STACKSIZE - 1],
-        TaskParameter[1].TaskPriority,
-        TaskParameter[1].TaskID,
-        &Task_STK[1][0],
-        TASK_STACKSIZE,
-        &TaskParameter[1],
-        (OS_TASK_OPT_STK_CHK | OS_TASK_OPT_STK_CLR));
-/*
-    OSTaskCreateExt( StartupTask,                               /* Create the startup task                              
-                     0,
-                    &StartupTaskStk[APP_CFG_STARTUP_TASK_STK_SIZE - 1u],
-                     APP_CFG_STARTUP_TASK_PRIO,
-                     APP_CFG_STARTUP_TASK_PRIO,
-                    &StartupTaskStk[0u],
-                     APP_CFG_STARTUP_TASK_STK_SIZE,
-                     0u,
-                    (OS_TASK_OPT_STK_CHK | OS_TASK_OPT_STK_CLR));
-
-#if OS_TASK_NAME_EN > 0u
-    OSTaskNameSet(         APP_CFG_STARTUP_TASK_PRIO,
-                  (INT8U *)"Startup Task",
-                           &os_err);
-#endif
-*/
-    OSStart();                                                  /* Start multitasking (i.e. give control to uC/OS-II)   */
-
-    while (DEF_ON) {                                            /* Should Never Get Here.                               */
-        ;
-    }
-}
-
-
-
-
-void task1(void* p_arg) {
-    task_para_set* task_data;
-    task_data = p_arg;
-    while (1)
-    {
-        printf("Tick: %d, Hello from task%d\n", OSTime, task_data->TaskID);
-        if ((Output_err = fopen_s(&Output_fp, "./Output.txt", "a")) == 0)
-        {
-            fprintf(Output_fp, "Tick: %d, Hello from task%d\n", OSTime, task_data->TaskID);
+    /* HW1: priorities are 1 and 2; job numbers start at zero. */
+    for (n = 0; n < TASK_NUMBER; ++n) {
+        err = OSTaskCreateExt(n == 0 ? task1 : task2,
+                             &TaskParameter[n],
+                             &TaskStacks[n][TASK_STACKSIZE - 1u],
+                             (INT8U)TaskParameter[n].TaskPriority,
+                             TaskParameter[n].TaskID,
+                             &TaskStacks[n][0], TASK_STACKSIZE,
+                             &TaskParameter[n],
+                             OS_TASK_OPT_STK_CHK | OS_TASK_OPT_STK_CLR);
+        if (err != OS_ERR_NONE) {
+            fprintf(stderr, "OSTaskCreateExt failed: %u\n", (unsigned)err);
             fclose(Output_fp);
+            return EXIT_FAILURE;
         }
-        OSTimeDly(task_data->TaskPeriodic);
     }
+    /* HW1: the initial dispatch is at tick zero. */
+    OSTimeSet(0u);
+    OSStart();
+    return EXIT_FAILURE;  /* OSStart should not return. */
 }
 
-void task2(void* p_arg) {
-    task_para_set* task_data;
-    task_data = p_arg;
-    while (1)
-    {
-        printf("Tick: %d, Hello from task%d\n", OSTime, task_data->TaskID);
-        if ((Output_err = fopen_s(&Output_fp, "./Output.txt", "a")) == 0)
-        {
-            fprintf(Output_fp, "Tick: %d, Hello from task%d\n", OSTime, task_data->TaskID);
-            fclose(Output_fp);
-        }
-        OSTimeDly(task_data->TaskPeriodic);
-    }
-}
-
-/*
-*********************************************************************************************************
-*                                            STARTUP TASK
-*
-* Description : This is an example of a startup task.  As mentioned in the book's text, you MUST
-*               initialize the ticker only once multitasking has started.
-*
-* Arguments   : p_arg   is the argument passed to 'StartupTask()' by 'OSTaskCreate()'.
-*
-* Returns     : none
-*
-* Notes       : 1) The first line of code is used to prevent a compiler warning because 'p_arg' is not
-*                  used.  The compiler should not generate any code for this statement.
-*********************************************************************************************************
-*/
-
-static  void  StartupTask (void *p_arg)
+/* HW1: execution time in TaskSet is metadata, not a busy-wait for HW1. */
+static void TaskBody(void *p_arg)
 {
-   (void)p_arg;
+    task_para_set *task_data = (task_para_set *)p_arg;
+    OS_CPU_SR cpu_sr = 0u;
 
-    OS_TRACE_INIT();                                            /* Initialize the uC/OS-II Trace recorder               */
-
-#if OS_CFG_STAT_TASK_EN > 0u
-    OSStatTaskCPUUsageInit(&err);                               /* Compute CPU capacity with no task running            */
-#endif
-
-#ifdef CPU_CFG_INT_DIS_MEAS_EN
-    CPU_IntDisMeasMaxCurReset();
-#endif
-    
-    APP_TRACE_DBG(("uCOS-III is Running...\n\r"));
-
-    while (DEF_TRUE) {                                          /* Task body, always written as an infinite loop.       */
-        OSTimeDlyHMSM(0u, 0u, 1u, 0u);
-		APP_TRACE_DBG(("Time: %d\n\r", OSTimeGet()));
+    while (1) {
+        OS_ENTER_CRITICAL();
+        HW1_Log("%lu\tTask(%u) is running\n",
+                (unsigned long)OSTimeGet(), (unsigned)task_data->TaskID);
+        OS_EXIT_CRITICAL();
+        OSTimeDly(task_data->TaskPeriodic);
     }
 }
 
+static void task1(void *p_arg)
+{
+    TaskBody(p_arg);
+}
+
+static void task2(void *p_arg)
+{
+    TaskBody(p_arg);
+}

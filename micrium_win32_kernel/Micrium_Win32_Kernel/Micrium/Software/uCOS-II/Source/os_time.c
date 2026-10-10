@@ -55,6 +55,7 @@
 void  OSTimeDly (INT32U ticks)
 {
     INT8U      y;
+    OS_PRIO    hw1_group_before, hw1_table_before; /* HW1 */
 #if OS_CRITICAL_METHOD == 3u                     /* Allocate storage for CPU status register           */
     OS_CPU_SR  cpu_sr = 0u;
 #endif
@@ -70,11 +71,16 @@ void  OSTimeDly (INT32U ticks)
     if (ticks > 0u) {                            /* 0 means no delay!                                  */
         OS_ENTER_CRITICAL();
         y            =  OSTCBCur->OSTCBY;        /* Delay current task                                 */
+        /* HW1 BEGIN: snapshot ready bits before putting the task to sleep. */
+        hw1_group_before = OSRdyGrp;
+        hw1_table_before = OSRdyTbl[y];
         OSRdyTbl[y] &= (OS_PRIO)~OSTCBCur->OSTCBBitX;
         OS_TRACE_TASK_SUSPENDED(OSTCBCur);
         if (OSRdyTbl[y] == 0u) {
             OSRdyGrp &= (OS_PRIO)~OSTCBCur->OSTCBBitY;
         }
+        HW1_TraceReady("waiting", OSTCBCur, hw1_group_before, hw1_table_before);
+        /* HW1 END */
         OSTCBCur->OSTCBDly = ticks;              /* Load ticks in TCB                                  */
         OS_TRACE_TASK_DLY(ticks);
         OS_EXIT_CRITICAL();
