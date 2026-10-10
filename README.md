@@ -38,7 +38,9 @@ CPU execution-time simulation.
 
 - `OSStart`: logs initial dispatch with `***********` and switch count 0.
 - `OS_Sched` and `OSIntExit`: log immediately before their real context switches,
-  after the original `OSCtxSwCtr` increment. The first actual switch is count 1.
+  after the original `OSCtxSwCtr` increment. Actual switches are displayed with
+  zero-based indices (`OSCtxSwCtr - 1`), so the sequence is 0,0,1,2,3,... including
+  the initial dispatch. The kernel counter itself is unchanged.
 - `OSTimeDly`: snapshots the affected ready-table byte and group before/after blocking.
 - `OSTimeTick`: snapshots the same values before/after making a delayed task ready.
 - Job numbers begin at 0 and advance on wakeup, before the next dispatch is logged.
@@ -48,9 +50,8 @@ CPU execution-time simulation.
 
 The checked-in `Output.txt` is from the actual compiled OS2 executable. Task 1
 runs at ticks 0,4,8,12,16,20,24,28; task 2 at 0,7,14,21,28. At tick 28 both
-become ready, task 1 runs first, then task 2. The final context-switch count is 23.
-The sample PDF's displayed counter is one lower after its first switch; this
-implementation reports the actual existing kernel counter rather than changing it.
+become ready, task 1 runs first, then task 2. There are 23 actual context switches;
+the final displayed index is 22, matching the assignment's zero-based format.
 
 ## Submission
 
@@ -60,6 +61,6 @@ The report contains the filled system flow, function explanations, marked source
 captures, actual output excerpts, and validation results. Visual Studio caches
 and intermediate object/PDB files are excluded.
 
-Validation: Debug/Win32 built with v145; native run exited successfully; output
+Validation: Debug/Win32 built with the original v143 toolset; native run exited successfully; output
 checked for periods, job indices, ready bitmap transitions, switch count and
 priority at tick 28; missing and malformed input must exit with a nonzero code.

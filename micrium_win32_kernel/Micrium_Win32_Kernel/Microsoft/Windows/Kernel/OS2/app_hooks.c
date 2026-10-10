@@ -177,6 +177,10 @@ static void HW1_TaskLabel(OS_TCB *ptcb, char *label, size_t size)
 void HW1_TraceSwitch(INT8U initial)
 {
     char current[48], next[48];
+    /* HW1 sample: initial dispatch = 0; actual switches are numbered from 0.
+     * The kernel has already incremented OSCtxSwCtr, so offset only the display. */
+    INT32U displayed_count = (initial != 0u || OSCtxSwCtr == 0u)
+                          ? 0u : OSCtxSwCtr - 1u;
     if (initial != 0u) {
         strcpy_s(current, sizeof(current), "***********");
     } else {
@@ -184,7 +188,7 @@ void HW1_TraceSwitch(INT8U initial)
     }
     HW1_TaskLabel(OSTCBHighRdy, next, sizeof(next));
     HW1_Log("%lu\t%s\t%s\t%lu\n", (unsigned long)OSTimeGet(),
-            current, next, (unsigned long)OSCtxSwCtr);
+            current, next, (unsigned long)displayed_count);
 }
 
 void HW1_TraceReady(const char *state, OS_TCB *ptcb,
